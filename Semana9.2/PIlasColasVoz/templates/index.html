@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Visualizador de colas FIFO</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+  <nav class="navbar navbar-dark bg-primary">
+    <div class="container">
+      <span class="navbar-brand mb-0 h1">Colas FIFO en Python</span>
+    </div>
+  </nav>
+
+  <main class="container py-4 py-md-5">
+    <div class="row g-4">
+      <section class="col-lg-5">
+        <div class="card shadow-sm">
+          <div class="card-body p-4">
+            <h1 class="h4 mb-2">Administrar la cola</h1>
+            <p class="text-secondary">Agregá elementos manualmente o dictalos por voz.</p>
+
+            <form id="enqueue-form" class="mb-3">
+              <label for="elemento" class="form-label">Nuevo elemento</label>
+              <div class="input-group">
+                <input id="elemento" class="form-control" type="text" maxlength="120"
+                       placeholder="Ej.: María" autocomplete="off" required>
+                <button class="btn btn-primary" type="submit">Encolar</button>
+              </div>
+            </form>
+
+            <div class="d-grid gap-2">
+              <button id="voice-button" class="btn btn-outline-primary" type="button">
+                <span aria-hidden="true">🎙</span> Encolar por voz
+              </button>
+              <button id="dequeue-button" class="btn btn-outline-danger" type="button">Desencolar primero</button>
+              <button id="clear-button" class="btn btn-outline-secondary" type="button">Vaciar cola</button>
+            </div>
+            <p class="form-text mt-3 mb-0">
+              Para usar la voz, permití el acceso al micrófono. La función depende del navegador y suele requerir HTTPS o localhost.
+            </p>
+          </div>
+        </div>
+
+        <div class="alert alert-info mt-4 mb-0" role="note">
+          <strong>Regla FIFO:</strong> el primero en entrar es el primero en salir.
+        </div>
+      </section>
+
+      <section class="col-lg-7">
+        <div class="card shadow-sm">
+          <div class="card-body p-4">
+            <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
+              <div>
+                <h2 class="h4 mb-1">Visualización</h2>
+                <p class="text-secondary mb-0">Frente de la cola a la izquierda; final a la derecha.</p>
+              </div>
+              <span id="count" class="badge text-bg-primary fs-6">0 elementos</span>
+            </div>
+
+            <div id="queue-view" class="d-flex flex-wrap gap-2 align-items-center mb-4" aria-live="polite">
+              <p class="text-secondary mb-0">La cola está vacía.</p>
+            </div>
+
+            <div class="border-top pt-3">
+              <h3 class="h6">Estado</h3>
+              <p id="status" class="mb-0 text-secondary" role="status">Listo para comenzar.</p>
+            </div>
+
+            <div class="border-top mt-4 pt-3">
+              <h3 class="h6">Funciones del código</h3>
+              <ul class="mb-0">
+                <li><code>encolar(queue, element)</code>: agrega al final.</li>
+                <li><code>desencolar(queue)</code>: retira el primero.</li>
+                <li><code>esta_vacia(queue)</code>: comprueba si está vacía.</li>
+                <li><code>obtener_cola()</code>: muestra la cola actual.</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+<script>
+  const form = document.getElementById("enqueue-form");
+  const input = document.getElementById("elemento");
+  const queueView = document.getElementById("queue-view");
+  const count = document.getElementById("count");
+  const status = document.getElementById("status");
+  const voiceButton = document.getElementById("voice-button");
+
+  function setStatus(message, isError = false) {
+    status.textContent = message;
+    status.className = isError ? "mb-0 text-danger" : "mb-0 text-secondary";
+  }
+
+  function renderQueue(queue) {
+    queueView.replaceChildren();
+    count.textContent = `${queue.length} ${queue.length === 1 ? "elemento" : "elementos"}`;
+
+    if (queue.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "text-secondary mb-0";
+      empty.textContent = "La cola está vacía.";
+      queueView.appendChild(empty);
+      return;
+    }
+
+    queue.forEach((item, index) => {
+      const wrapper = document.createElement("div");
+      wrapper.className = "text-center";
+
+      const badge = document.createElement("div");
+      badge.className = "border rounded bg-white px-3 py-3 shadow-sm";
+      badge.textContent = item;
+
+      const label = document.createElement("small");
+      label.className = "d-block text-secondary mt-1";
+      label.textContent = index === 0 ? "Frente" : (index === queue.length - 1 ? "Final" : `Posición ${index + 1}`);
+
+      wrapper.append(badge, label);
+      queueView.appendChild(wrapper);
+
+      if (index < queue.length - 1) {
+        const arrow = document.createElement("span");
+        arrow.className = "text-secondary fs-5";
+        arrow.textContent = "→";
+        arrow.setAttribute("aria-hidden", "true");
+        queueView.appendChild(arrow);
+      }
+    });
+  }
+
+  async function api(path, body = undefined) {
+    const options = { method: body === undefined ? "GET" : "POST",
+      headers: { "Content-Type": "application/json" } };
+    if (body !== undefined) options.body = JSON.stringify(body);
+    const response = await fetch(path, options);
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "Ocurrió un error.");
+    return data;
+  }
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const elemento = input.value.trim();
+    if (!elemento) {
+      setStatus("Escribí un elemento antes de encolar.", true);
+      input.focus();
+      return;
+    }
+    try {
+      const data = await api("/api/encolar", { elemento });
+      renderQueue(data.cola);
+      setStatus(data.mensaje);
+      input.value = "";
+      input.focus();
+    } catch (error) {
+      setStatus(error.message, true);
+    }
+  });
+
+  document.getElementById("dequeue-button").addEventListener("click", async () => {
+    try {
+      const data = await api("/api/desencolar", {});
+      renderQueue(data.cola);
+      setStatus(data.mensaje);
+    } catch (error) {
+      setStatus(error.message, true);
+    }
+  });
+
+  document.getElementById("clear-button").addEventListener("click", async () => {
+    try {
+      const data = await api("/api/vaciar", {});
+      renderQueue(data.cola);
+      setStatus(data.mensaje);
+    } catch (error) {
+      setStatus(error.message, true);
+    }
+  });
+
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    voiceButton.disabled = true;
+    voiceButton.textContent = "Voz no compatible con este navegador";
+    voiceButton.title = "Probá con una versión reciente de Chrome o Edge.";
+  } else {
+    const recognition = new SpeechRecognition();
+    recognition.lang = "es-NI";
+    recognition.continuous = false;
+    recognition.interimResults = false;
+
+    voiceButton.addEventListener("click", () => {
+      try {
+        recognition.start();
+        voiceButton.disabled = true;
+        voiceButton.textContent = "Escuchando…";
+        setStatus("Decí el elemento que querés agregar.");
+      } catch (error) {
+        setStatus("No se pudo iniciar el reconocimiento. Intentá de nuevo.", true);
+      }
+    });
+
+    recognition.addEventListener("result", async (event) => {
+      const spokenText = event.results[0][0].transcript.trim();
+      if (!spokenText) {
+        setStatus("No se detectó ningún texto. Intentá de nuevo.", true);
+        return;
+      }
+      try {
+        const data = await api("/api/encolar", { elemento: spokenText });
+        renderQueue(data.cola);
+        setStatus(`Reconocido por voz: “${spokenText}”. ${data.mensaje}`);
+      } catch (error) {
+        setStatus(error.message, true);
+      }
+    });
+
+    recognition.addEventListener("error", (event) => {
+      const messages = {
+        "not-allowed": "El navegador no tiene permiso para usar el micrófono.",
+        "no-speech": "No se detectó voz. Intentá hablar más cerca del micrófono.",
+        "network": "Falló el servicio de reconocimiento de voz. Revisá la conexión."
+      };
+      setStatus(messages[event.error] || "No se pudo reconocer la voz. Intentá de nuevo.", true);
+    });
+
+    recognition.addEventListener("end", () => {
+      voiceButton.disabled = false;
+      voiceButton.innerHTML = '<span aria-hidden="true">🎙</span> Encolar por voz';
+    });
+  }
+
+  renderQueue({{ cola | tojson }});
+</script>
+</body>
+</html>
