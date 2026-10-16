@@ -66,12 +66,36 @@ def deshacer_ultima_atencion():
 mostrar_estado()'''
 
 
+# Reto 1: Consultar el siguiente turno sin extraerlo.
 def consultar_siguiente():
     if not cola_pendientes:
         return None
 
     return cola_pendientes[0]
 
+
+# Reto 2: Buscar una solicitud por ID.
+import re
+
+def buscar_solicitud(id_solicitud):
+    while True:
+        try:
+            id_solicitud = input("Ingrese el ID que desea buscar: ")
+            if not cola_pendientes:
+                return None
+            for i in cola_pendientes:
+                if i["id"] == id_solicitud:
+                    return i
+
+            if not pila_historial:
+                return None
+                break
+            for i in pila_historial:
+                if i["id"] == id_solicitud:
+                    return i
+        except ValueError:
+            print("Ingrese un número entero.\n")
+    
 
 
 
@@ -83,7 +107,8 @@ def ejecutar_menu():
         print("3. Consultar siguiente")
         print("4. Deshacer última atención")
         print("5. Mostrar estado")
-        print("6. Salir")
+        print("6. Buscar solicitud")
+        print("7. Salir")
         opcion = input("Opción: ").strip()
 
         if opcion == "1":
@@ -100,6 +125,8 @@ def ejecutar_menu():
         elif opcion == "5":
             mostrar_estado()
         elif opcion == "6":
+            buscar_solicitud(id_solicitud)
+        elif opcion == "7":
             break
         else:
             print("Opción inválida")
